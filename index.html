@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Examen FIA – Reconocimiento de dígitos por búsqueda en grafos + AG</title>
+<style>
+  :root{--bg:#f4f6fb;--card:#fff;--ink:#1d2433;--mut:#5d6679;--acc:#4b3f9e;--ok:#1f9d55;--bad:#d64545;--cur:#f59e0b;--vis:#3b82f6;--open:#fde68a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--acc);color:#fff;padding:14px 20px}
+  header h1{margin:0;font-size:20px} header p{margin:4px 0 0;font-size:13px;opacity:.85}
+  main{max-width:1150px;margin:auto;padding:16px;display:grid;gap:16px}
+  .card{background:var(--card);border-radius:10px;padding:14px 16px;box-shadow:0 1px 4px #0002}
+  .card h2{margin:0 0 10px;font-size:16px;color:var(--acc)}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  button,select,input[type=file]{font:inherit;padding:6px 10px;border-radius:6px;border:1px solid #bbb;background:#fff}
+  button{background:var(--acc);color:#fff;border:none;cursor:pointer} button:hover{filter:brightness(1.1)}
+  button.sec{background:#e5e7f5;color:var(--acc)}
+  .grid2{display:grid;grid-template-columns:minmax(260px,330px) 1fr;gap:16px}
+  @media(max-width:850px){.grid2{grid-template-columns:1fr}}
+  canvas.px{image-rendering:pixelated;border:1px solid #999;background:#fff}
+  .imgs{display:flex;gap:10px;flex-wrap:wrap}
+  .imgs figure{margin:0;text-align:center;font-size:11px;color:var(--mut)}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th,td{border-bottom:1px solid #e3e6ef;padding:4px 6px;text-align:left}
+  th{background:#eef0f9}
+  .res{font-size:34px;font-weight:700;color:var(--acc)}
+  .small{font-size:12px;color:var(--mut)}
+  svg text{font-family:inherit}
+  .ok{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  #log{font-size:12px;max-height:150px;overflow:auto;background:#f8f9fd;border-radius:6px;padding:6px 8px;margin-top:8px}
+  tr.sel{background:#fff6d6} tr.clk{cursor:pointer} tr.clk:hover{background:#f1f3fb}
+  .legend span{display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:12px}
+  .legend i{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid #666}
+</style>
+</head>
+<body>
+<header>
+  <h1>Reconocimiento de dígitos 0–9 + null · Búsqueda en grafos (BFS / DFS / A*) + Algoritmo Genético</h1>
+  <p>Examen FIA · Imagen 28×28 → rasgos (huecos, endpoints, simetría, densidad) → grafo de búsqueda animado</p>
+</header>
+<main>
+
+<section class="card">
+  <h2>1 · Entrada y clasificación</h2>
+  <div class="row">
+    <label>Cargar imagen: <input type="file" id="file" accept="image/*"></label>
+    <span class="small">o generar:</span>
+    <select id="selDigit"></select>
+    <button class="sec" id="btnGen">Generar dígito</button>
+    <select id="selAlgo">
+      <option value="astar">A* (heurística)</option>
+      <option value="bfs">BFS (ciega)</option>
+      <option value="dfs">DFS (ciega)</option>
+    </select>
+    <label class="small">Velocidad <input type="range" id="speed" min="100" max="1500" value="650" step="50"></label>
+    <button id="btnClass">Clasificar y animar</button>
+  </div>
+</section>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Imagen y rasgos</h2>
+    <div class="imgs">
+      <figure><canvas id="cvIn" class="px" width="28" height="28" style="width:112px;height:112px"></canvas><div>Entrada 28×28</div></figure>
+      <figure><canvas id="cvBin" class="px" width="28" height="28" style="width:112px;height:112px"></canvas><div>Normalizada</div></figure>
+      <figure><canvas id="cvSk" class="px" width="28" height="28" style="width:112px;height:112px"></canvas><div>Esqueleto</div></figure>
+    </div>
+    <div style="margin-top:10px"><span class="small">Resultado:</span> <span class="res" id="result">–</span></div>
+    <div class="small" id="resInfo"></div>
+    <table id="featTable" style="margin-top:8px"></table>
+  </section>
+
+  <section class="card">
+    <h2>Grafo de búsqueda (animación)</h2>
+    <div class="legend">
+      <span><i style="background:#fff"></i>sin visitar</span>
+      <span><i style="background:var(--open)"></i>frontera (abierta)</span>
+      <span><i style="background:var(--vis)"></i>visitado</span>
+      <span><i style="background:var(--cur)"></i>nodo actual</span>
+      <span><i style="background:var(--ok)"></i>camino final</span>
+    </div>
+    <div id="graphBox"></div>
+    <div id="log"></div>
+  </section>
+</div>
+
+<section class="card">
+  <h2>2 · Evaluación de los 25 dígitos de prueba (0–9 repetidos, con variaciones de estilo)</h2>
+  <div class="row">
+    <button id="btnEval">Generar y evaluar 25 dígitos</button>
+    <button class="sec" id="btnEvalAnim">Animar los 25 uno por uno</button>
+    <button class="sec" id="btnEvalNew">Nuevos 25 (otra semilla)</button>
+    <span class="small">Clic en una fila para cargarla y animarla.</span>
+  </div>
+  <div class="row" style="margin-top:8px"><b id="accTxt"></b></div>
+  <div id="evalTable"></div>
+</section>
+
+<section class="card">
+  <h2>3 · Algoritmo genético (optimiza los pesos de los rasgos)</h2>
+  <div class="row">
+    <button id="btnGA">Entrenar / re-entrenar AG</button>
+    <span class="small" id="gaStatus"></span>
+  </div>
+  <div class="grid2" style="margin-top:8px">
+    <div><canvas id="gaChart" width="320" height="180" style="width:100%;max-width:330px;border:1px solid #ccc;background:#fff"></canvas></div>
+    <div><table id="wTable"></table></div>
+  </div>
+  <div class="small" id="gaInfo"></div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+/* ======================= Utilidades ======================= */
+const N = 28;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v=0;while(!u)u=r();v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+const $ = id => document.getElementById(id);
+
+/* ======================= Generador de dígitos (variaciones de estilo) ======================= */
+const FONTS = ['Arial','Verdana','Georgia','Times New Roman','Courier New','Trebuchet MS','sans-serif','serif','monospace'];
+const gcv = document.createElement('canvas'); gcv.width = N; gcv.height = N;
+const gctx = gcv.getContext('2d', {willReadFrequently:true});
+function renderDigit(d, rng, noise=true){
+  const font = FONTS[Math.floor(rng()*FONTS.length)];
+  const bold = rng()<0.4 ? 'bold ' : '';
+  const ital = rng()<0.2 ? 'italic ' : '';
+  const size = 18 + Math.floor(rng()*7);
+  gctx.fillStyle = '#fff'; gctx.fillRect(0,0,N,N);
+  gctx.save();
+  gctx.translate(14 + (rng()-.5)*4, 14 + (rng()-.5)*4);
+  gctx.rotate((rng()-.5) * 0.45);
+  gctx.fillStyle = '#000';
+  gctx.font = `${ital}${bold}${size}px "${font}"`;
+  gctx.textAlign = 'center'; gctx.textBaseline = 'middle';
+  gctx.fillText(String(d), 0, 1);
+  gctx.restore();
+  const im = gctx.getImageData(0,0,N,N).data;
+  const g = new Float32Array(N*N);
+  for(let i=0;i<N*N;i++){
+    let v = (im[4*i]+im[4*i+1]+im[4*i+2])/3;
+    if(noise) v += gauss(rng)*10;
+    g[i] = Math.max(0, Math.min(255, v));
+  }
+  return g;
+}
+
+/* ======================= Preprocesamiento ======================= */
+function otsu(vals){
+  const h = new Array(256).fill(0); vals.forEach(v=>h[Math.max(0,Math.min(255,Math.round(v)))]++);
+  const tot = vals.length; let sum=0; for(let i=0;i<256;i++) sum+=i*h[i];
+  let sB=0,wB=0,best=0,th=128;
+  for(let t=0;t<256;t++){wB+=h[t]; if(!wB) continue; const wF=tot-wB; if(!wF) break;
+    sB+=t*h[t]; const mB=sB/wB, mF=(sum-sB)/wF; const v=wB*wF*(mB-mF)*(mB-mF); if(v>best){best=v;th=t}}
+  return th;
+}
+/* gray(28x28, 0..255) -> {inkRaw, bin(normalizada), rawRatio} */
+function preprocess(gray){
+  // polaridad: si el borde es oscuro, el fondo es oscuro (tinta clara)
+  let bs=0,bc=0;
+  for(let i=0;i<N;i++){bs+=gray[i]+gray[(N-1)*N+i]+gray[i*N]+gray[i*N+N-1];bc+=4}
+  const darkBg = (bs/bc) < 128;
+  const ink = new Float32Array(N*N);
+  for(let i=0;i<N*N;i++) ink[i] = darkBg ? gray[i] : 255-gray[i];
+  const th = otsu(Array.from(ink));
+  let x0=N,y0=N,x1=-1,y1=-1,cnt=0;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(ink[y*N+x]>th && ink[y*N+x]>40){cnt++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  const rawRatio = cnt/(N*N);
+  const out = new Uint8Array(N*N);
+  if(cnt<4) return {bin:out, rawRatio, empty:true};
+  const w=x1-x0+1,h=y1-y0+1, sc=20/Math.max(w,h);
+  const tw=Math.max(1,Math.round(w*sc)), thh=Math.max(1,Math.round(h*sc));
+  const ox=Math.floor((N-tw)/2), oy=Math.floor((N-thh)/2);
+  for(let ty=0;ty<thh;ty++)for(let tx=0;tx<tw;tx++){
+    const sx0=x0+tx/sc, sx1=x0+(tx+1)/sc, sy0=y0+ty/sc, sy1=y0+(ty+1)/sc;
+    let s=0,c=0;
+    for(let yy=Math.floor(sy0);yy<=Math.min(y1,Math.ceil(sy1)-1)||yy<=Math.floor(sy0);yy++){
+      for(let xx=Math.floor(sx0);xx<=Math.min(x1,Math.ceil(sx1)-1)||xx<=Math.floor(sx0);xx++){
+        if(xx<0||yy<0||xx>=N||yy>=N) continue;
+        s += ink[yy*N+xx]>th ? 1 : 0; c++;
+      }
+    }
+    out[(oy+ty)*N+ox+tx] = (c && s/c >= 0.4) ? 1 : 0;
+  }
+  return {bin:out, rawRatio, empty:false};
+}
+
+/* ======================= Rasgos ======================= */
+function zhangSuen(bin){
+  const im = Uint8Array.from(bin);
+  const g=(x,y)=> (x<0||y<0||x>=N||y>=N)?0:im[y*N+x];
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(let pass=0;pass<2;pass++){
+      const del=[];
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+        if(!im[y*N+x]) continue;
+        const p2=g(x,y-1),p3=g(x+1,y-1),p4=g(x+1,y),p5=g(x+1,y+1),p6=g(x,y+1),p7=g(x-1,y+1),p8=g(x-1,y),p9=g(x-1,y-1);
+        const B=p2+p3+p4+p5+p6+p7+p8+p9;
+        const seq=[p2,p3,p4,p5,p6,p7,p8,p9,p2]; let A=0;
+        for(let i=0;i<8;i++) if(seq[i]===0&&seq[i+1]===1) A++;
+        if(B<2||B>6||A!==1) continue;
+        if(pass===0){ if(p2*p4*p6!==0||p4*p6*p8!==0) continue; }
+        else { if(p2*p4*p8!==0||p2*p6*p8!==0) continue; }
+        del.push(y*N+x);
+      }
+      if(del.length){changed=true; del.forEach(i=>im[i]=0)}
+    }
+  }
+  return im;
+}
+function components(mask, conn8, wantBg){
+  const lab = new Int32Array(N*N).fill(-1); const comps=[];
+  const target = wantBg?0:1;
+  for(let s=0;s<N*N;s++){
+    if(mask[s]!==target||lab[s]>=0) continue;
+    const id=comps.length, st=[s]; lab[s]=id; let area=0, border=false;
+    while(st.length){
+      const p=st.pop(); area++; const x=p%N,y=(p/N)|0;
+      if(x===0||y===0||x===N-1||y===N-1) border=true;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy) continue; if(!conn8 && dx&&dy) continue;
+        const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=N||ny>=N) continue;
+        const q=ny*N+nx; if(mask[q]===target&&lab[q]<0){lab[q]=id;st.push(q)}
+      }
+    }
+    comps.push({area,border});
+  }
+  return {lab,comps};
+}
+const FEAT_NAMES = ['huecos','endpoints','uniones','simetría L-R','simetría T-B',
+  'dens (0,0)','dens (0,1)','dens (0,2)','dens (1,0)','dens (1,1)','dens (1,2)','dens (2,0)','dens (2,1)','dens (2,2)'];
+const NF = FEAT_NAMES.length;
+const STRUCT = [0,1,2];          // rasgos estructurales (usados por h(n))
+function extractFeatures(bin){
+  let x0=N,y0=N,x1=-1,y1=-1,ink=0;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(bin[y*N+x]){ink++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  const f = new Float32Array(NF);
+  const sk = zhangSuen(bin);
+  if(!ink) return {f, sk, ink:0, comps:0};
+  // huecos: componentes de fondo (4-conexo) que no tocan el borde
+  const bg = components(bin,false,true);
+  let holes=0; bg.comps.forEach(c=>{ if(!c.border && c.area>=2) holes++ });
+  // endpoints y uniones sobre el esqueleto
+  let ep=0; const jmask=new Uint8Array(N*N);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(!sk[y*N+x]) continue; let n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue;
+      const nx=x+dx,ny=y+dy; if(nx>=0&&ny>=0&&nx<N&&ny<N&&sk[ny*N+nx]) n++; }
+    if(n===1) ep++; else if(n>=3) jmask[y*N+x]=1;
+  }
+  const jc = components(jmask,true,false).comps.length;
+  // simetrías (IoU del espejo dentro de la caja envolvente)
+  let bothLR=0,bothTB=0;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    if(!bin[y*N+x]) continue;
+    if(bin[y*N+(x0+x1-x)]) bothLR++;
+    if(bin[(y0+y1-y)*N+x]) bothTB++;
+  }
+  const symLR = bothLR/(2*ink-bothLR), symTB = bothTB/(2*ink-bothTB);
+  // densidad 3x3 por regiones de la caja
+  const bw=x1-x0+1,bh=y1-y0+1; const dens=new Array(9).fill(0), area=new Array(9).fill(0);
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const r=Math.min(2,Math.floor((y-y0)*3/bh)), c=Math.min(2,Math.floor((x-x0)*3/bw));
+    area[r*3+c]++; if(bin[y*N+x]) dens[r*3+c]++;
+  }
+  f[0]=holes; f[1]=ep; f[2]=jc; f[3]=symLR; f[4]=symTB;
+  for(let i=0;i<9;i++) f[5+i]=area[i]?dens[i]/area[i]:0;
+  const nComp = components(bin,true,false).comps.length;
+  return {f, sk, ink, comps:nComp};
+}
+
+/* ======================= Tabla teórica de rasgos y similitud (aristas del grafo) ======================= */
+// [huecos, endpoints, simL-R, simT-B, uniones]
+const THEORY = {0:[1,0,1,1,0],1:[0,2,1,1,0],2:[0,2,0,0,0],3:[0,2,0,1,0],4:[1,3,0,0,1],
+                5:[0,2,0,0,0],6:[1,1,0,0,1],7:[0,2,0,0,0],8:[2,0,1,1,1],9:[1,1,0,0,1]};
+const TW=[3,3,1.5,1.5,1], TR=[2,3,1,1,1];
+function simWeight(a,b){
+  let s=0; for(let k=0;k<5;k++) s+=TW[k]*(1-Math.abs(THEORY[a][k]-THEORY[b][k])/TR[k]);
+  return Math.max(1,Math.round(s));
+}
+const SIM = []; for(let a=0;a<10;a++){SIM.push([]);for(let b=0;b<10;b++) SIM[a][b]=a===b?10:simWeight(a,b)}
+const SIM_TH = 8; // se dibujan/recorren las aristas dígito–dígito con peso >= 8
+
+/* ======================= Prototipos, costo y clasificación ======================= */
+let PROTO = null;      // media de rasgos por dígito
+let SCALE = null;      // desviación global por rasgo
+let WEIGHTS = new Array(NF).fill(1);
+let THETA = 3;         // umbral de rechazo (null)
+
+function buildPrototypes(){
+  const rng = mulberry32(101), per=14; PROTO=[]; const all=[];
+  for(let d=0;d<10;d++){
+    const acc=new Array(NF).fill(0);
+    for(let i=0;i<per;i++){
+      const pp=preprocess(renderDigit(d,rng)); const F=extractFeatures(pp.bin).f; all.push(F);
+      for(let k=0;k<NF;k++) acc[k]+=F[k];
+    }
+    PROTO.push(acc.map(v=>v/per));
+  }
+  SCALE=new Array(NF).fill(0);
+  for(let k=0;k<NF;k++){
+    const m=all.reduce((s,F)=>s+F[k],0)/all.length;
+    const v=all.reduce((s,F)=>s+(F[k]-m)**2,0)/all.length;
+    SCALE[k]=Math.max(0.05,Math.sqrt(v));
+  }
+}
+function partCost(f,d,w,idx){ let s=0; for(const k of idx) s+=w[k]*Math.abs(f[k]-PROTO[d][k])/SCALE[k]; return s; }
+const IDX_ALL=[...Array(NF).keys()];
+const IDX_STRUCT=STRUCT, IDX_DETAIL=IDX_ALL.filter(k=>!STRUCT.includes(k));
+function costs(f,w=WEIGHTS){
+  const sw=w.reduce((a,b)=>a+b,0)||1;
+  return PROTO.map((_,d)=>{
+    const h=partCost(f,d,w,IDX_STRUCT)/sw;      // h(n): costo estructural (barato)
+    const g=partCost(f,d,w,IDX_DETAIL)/sw;      // g(n): costo de refinamiento (simetría + densidad)
+    return {d,g,h,c:g+h};
+  });
+}
+
+/* ======================= Grafo y algoritmos de búsqueda ======================= */
+const NODES = ['U',0,1,2,3,4,5,6,7,8,9,'N'];
+function adjacency(){
+  const adj = {}; NODES.forEach(n=>adj[n]=[]);
+  for(let d=0;d<10;d++){adj.U.push(d)} adj.U.push('N');
+  for(let d=0;d<10;d++){adj[d].push('U')}
+  adj.N.push('U');
+  for(let a=0;a<10;a++)for(let b=0;b<10;b++) if(a!==b&&SIM[a][b]>=SIM_TH) adj[a].push(b);
+  return adj;
+}
+const ADJ = adjacency();
+
+/* Devuelve {pred, steps, visitedCount, costs} */
+function search(algo, F, rawInfo){
+  const cs = costs(F.f);
+  const cost = n => n==='N'?THETA:(n==='U'?0:cs[n].c);
+  const trivialNull = rawInfo.empty || F.ink===0 || rawInfo.rawRatio>0.6 || F.comps>5;
+  const steps=[]; const visited=[]; let pred=null;
+  const snap=(cur,open,msg)=>steps.push({cur,visited:[...visited],open:[...open],msg});
+  if(trivialNull){
+    visited.push('U'); snap('U',['N'],'Imagen vacía/ruidosa → ir directo a nodo "null".');
+    visited.push('N'); snap('N',[],'Objetivo: null');
+    return {pred:'N',steps,visited:visited.length,cs,reason:'imagen vacía o ruidosa'};
+  }
+  if(algo==='astar'){
+    const open=[]; const closed=new Set();
+    visited.push('U'); closed.add('U');
+    const cand=[...Array(10).keys(),'N'];
+    cand.forEach(n=>open.push({n,f:cost(n)}));
+    snap('U',cand,'Se expande "Unknown": se generan 10 dígitos + null con f=g+h.');
+    while(open.length){
+      open.sort((a,b)=>a.f-b.f); const cur=open.shift();
+      visited.push(cur.n); closed.add(cur.n);
+      const isGoal = true; // el menor f es objetivo (dígito con costo ≤ θ, o null con f=θ)
+      const info = cur.n==='N' ? `f(null)=θ=${THETA.toFixed(2)}` :
+        `f(${cur.n})=g+h=${cs[cur.n].g.toFixed(2)}+${cs[cur.n].h.toFixed(2)}=${cur.f.toFixed(2)}`;
+      snap(cur.n, open.map(o=>o.n), `Se extrae el menor f → ${cur.n==='N'?'null':cur.n}. ${info}. ¡Objetivo!`);
+      if(isGoal){ pred=cur.n; break; }
+    }
+  } else {
+    const seen=new Set(); const order=[];
+    if(algo==='bfs'){
+      const q=['U']; seen.add('U');
+      while(q.length){ const n=q.shift(); order.push(n);
+        ADJ[n].forEach(m=>{ if(!seen.has(m)){seen.add(m);q.push(m)} }); }
+    } else {
+      const dfs=n=>{ seen.add(n); order.push(n); ADJ[n].forEach(m=>{ if(!seen.has(m)) dfs(m) }); };
+      dfs('U');
+    }
+    let best='N', bestC=THETA;
+    order.forEach((n,i)=>{
+      visited.push(n);
+      if(n!=='U'&&n!=='N'&&cs[n].c<bestC){bestC=cs[n].c;best=n}
+      snap(n,[],`Visita ${i+1}/${order.length}: nodo ${n==='U'?'Unknown':(n==='N'?'null':n)}`+
+        (n!=='U'&&n!=='N'?` · costo=${cs[n].c.toFixed(2)}`:'')+` · mejor hasta ahora: ${best==='N'?'null':best}`);
+    });
+    pred=best;
+  }
+  return {pred,steps,visited:visited.length,cs,reason:''};
+}
+
+/* ======================= Algoritmo genético ======================= */
+let GA_SET=null;
+function buildGASet(){
+  const rng=mulberry32(777); GA_SET=[];
+  for(let d=0;d<10;d++)for(let i=0;i<12;i++){
+    const F=extractFeatures(preprocess(renderDigit(d,rng)).bin).f; GA_SET.push({F,d});
+  }
+}
+function accuracy(w,set){
+  let ok=0, margin=0;
+  const sw=w.reduce((a,b)=>a+b,0)||1;
+  for(const s of set){
+    const c=PROTO.map((_,d)=>partCost(s.F,d,w,IDX_ALL)/sw);
+    let b=0; for(let d=1;d<10;d++) if(c[d]<c[b]) b=d;
+    if(b===s.d){ok++; const sec=Math.min(...c.filter((_,i)=>i!==b)); margin+=(sec-c[b])/(sec+1e-6)}
+  }
+  return {acc:ok/set.length, margin:margin/set.length};
+}
+function fitness(w){ const r=accuracy(w,GA_SET); return r.acc*100 + r.margin; }
+function runGA(onProgress){
+  const POP=40, ELITE=2, MAXG=45, PATIENCE=12, PM=0.15, SIG=0.45, GOAL=99.5;
+  const rng=mulberry32(4242);
+  const rnd=()=>Array.from({length:NF},()=>rng()*3);
+  let pop=[new Array(NF).fill(1),...Array.from({length:POP-1},rnd)];
+  const hist=[]; let best=null,bestF=-1,stall=0,gen=0, base=accuracy(new Array(NF).fill(1),GA_SET).acc*100;
+  for(gen=0;gen<MAXG;gen++){
+    const fit=pop.map(fitness);
+    const idx=[...pop.keys()].sort((a,b)=>fit[b]-fit[a]);
+    if(fit[idx[0]]>bestF+1e-9){bestF=fit[idx[0]];best=[...pop[idx[0]]];stall=0}else stall++;
+    hist.push({gen,best:accuracy(best,GA_SET).acc*100,avg:fit.reduce((a,b)=>a+b,0)/fit.length});
+    if(accuracy(best,GA_SET).acc*100>=GOAL||stall>=PATIENCE) {gen++;break}
+    const next=idx.slice(0,ELITE).map(i=>[...pop[i]]);
+    const tour=()=>{let b=-1;for(let k=0;k<3;k++){const i=Math.floor(rng()*pop.length);if(b<0||fit[i]>fit[b])b=i}return pop[b]};
+    while(next.length<POP){
+      const a=tour(),b=tour(); const child=a.map((g,i)=>rng()<0.5?g:b[i]);   // cruce uniforme
+      for(let i=0;i<NF;i++) if(rng()<PM) child[i]=Math.max(0,Math.min(6,child[i]+gauss(rng)*SIG)); // mutación gaussiana
+      next.push(child);
+    }
+    pop=next;
+  }
+  return {best,hist,base,gens:gen,final:accuracy(best,GA_SET).acc*100};
+}
+function calibrateTheta(){
+  const sw=WEIGHTS.reduce((a,b)=>a+b,0)||1; const bc=[];
+  for(const s of GA_SET){ const c=costs(s.F).map(x=>x.c); bc.push(Math.min(...c)) }
+  const m=bc.reduce((a,b)=>a+b,0)/bc.length; const sd=Math.sqrt(bc.reduce((a,b)=>a+(b-m)**2,0)/bc.length);
+  THETA=m+3*sd;
+}
+function drawChart(hist){
+  const cv=$('gaChart'),c=cv.getContext('2d'); c.clearRect(0,0,cv.width,cv.height);
+  c.strokeStyle='#ccc'; c.fillStyle='#555'; c.font='10px sans-serif';
+  for(let p=0;p<=100;p+=25){const y=160-p*1.4; c.beginPath();c.moveTo(30,y);c.lineTo(310,y);c.stroke();c.fillText(p+'%',2,y+3)}
+  const n=Math.max(2,hist.length), X=i=>30+i*(280/(n-1));
+  c.strokeStyle='#4b3f9e'; c.lineWidth=2; c.beginPath();
+  hist.forEach((h,i)=>{const y=160-h.best*1.4; i?c.lineTo(X(i),y):c.moveTo(X(i),y)}); c.stroke();
+  c.fillStyle='#4b3f9e'; c.fillText('mejor fitness (% aciertos) por generación',34,12);
+  c.fillStyle='#555'; c.fillText('gen 0',30,175); c.fillText('gen '+(hist.length-1),280,175);
+}
+function showWeights(){
+  const mx=Math.max(...WEIGHTS)||1;
+  $('wTable').innerHTML='<tr><th>Rasgo</th><th>Peso</th><th></th></tr>'+FEAT_NAMES.map((n,i)=>
+    `<tr><td>${n}</td><td>${WEIGHTS[i].toFixed(2)}</td><td><div style="height:8px;background:#4b3f9e;width:${(WEIGHTS[i]/mx*100).toFixed(0)}%"></div></td></tr>`).join('');
+}
+function trainGA(){
+  const r=runGA();
+  WEIGHTS=r.best; calibrateTheta(); drawChart(r.hist); showWeights();
+  $('gaStatus').textContent=`Listo: ${r.gens} generaciones · aciertos ${r.base.toFixed(1)}% (pesos=1) → ${r.final.toFixed(1)}% (pesos AG) · θ(null)=${THETA.toFixed(2)}`;
+  $('gaInfo').textContent='Cromosoma = 14 pesos; fitness = % de aciertos sobre 120 dígitos generados (semilla distinta a los 25 de prueba); selección por torneo, cruce uniforme, mutación gaussiana, élite=2; paro por 99.5% de aciertos, 45 generaciones o 12 sin mejora.';
+}
+
+/* ======================= Grafo SVG y animación ======================= */
+const CX=300,CY=265,R=195; const POS={U:[CX,CY]};
+NODES.filter(n=>n!=='U').forEach((n,i)=>{const a=-Math.PI/2+i*2*Math.PI/11; POS[n]=[CX+R*Math.cos(a),CY+R*Math.sin(a)]});
+function buildGraph(){
+  let s=`<svg id="svg" viewBox="0 0 600 530" width="100%" style="max-height:540px">`;
+  // aristas dígito-dígito
+  for(let a=0;a<10;a++)for(let b=a+1;b<10;b++) if(SIM[a][b]>=SIM_TH){
+    const [x1,y1]=POS[a],[x2,y2]=POS[b];
+    s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#c9cde0" stroke-width="1"/>`;
+    s+=`<text x="${(x1+x2)/2}" y="${(y1+y2)/2}" font-size="9" fill="#8a90a8" text-anchor="middle">${SIM[a][b]}</text>`;
+  }
+  // aristas Unknown-nodo
+  NODES.filter(n=>n!=='U').forEach(n=>{
+    const [x2,y2]=POS[n];
+    s+=`<line id="e-${n}" x1="${CX}" y1="${CY}" x2="${x2}" y2="${y2}" stroke="#9aa1c4" stroke-width="1.4"/>`;
+    s+=`<g id="el-${n}"><rect x="${CX+(x2-CX)*.55-9}" y="${CY+(y2-CY)*.55-8}" width="18" height="14" rx="4" fill="#fff" stroke="#9aa1c4"/>`+
+       `<text id="elt-${n}" x="${CX+(x2-CX)*.55}" y="${CY+(y2-CY)*.55+3}" font-size="10" text-anchor="middle" fill="#333">–</text></g>`;
+  });
+  NODES.forEach(n=>{
+    const [x,y]=POS[n]; const lab=n==='U'?'Unknown':(n==='N'?'null':n);
+    s+=`<g><circle id="n-${n}" cx="${x}" cy="${y}" r="${n==='U'?34:21}" fill="#fff" stroke="#444" stroke-width="2"/>`+
+       `<text x="${x}" y="${y+(n==='U'?5:6)}" text-anchor="middle" font-size="${n==='U'?14:16}" font-weight="700">${lab}</text></g>`;
+  });
+  s+='</svg>'; $('graphBox').innerHTML=s;
+}
+function resetGraph(){
+  NODES.forEach(n=>{const c=$('n-'+n); c.setAttribute('fill','#fff'); c.setAttribute('stroke','#444'); c.setAttribute('stroke-width',2);
+    if(n!=='U'){const e=$('e-'+n); e.setAttribute('stroke','#9aa1c4'); e.setAttribute('stroke-width',1.4)}});
+}
+function setEdgeLabels(cs){
+  const cmin=Math.min(...cs.map(x=>x.c)), cmax=Math.max(...cs.map(x=>x.c));
+  for(let d=0;d<10;d++){
+    const w=Math.round(1+9*(1-(cs[d].c-cmin)/((cmax-cmin)||1)));
+    $('elt-'+d).textContent=w;
+  }
+  $('elt-N').textContent=Math.max(1,Math.min(10,Math.round(10*(1-THETA/(cmax||1)))))||1;
+}
+function paint(step){
+  resetGraph();
+  step.open.forEach(n=>$('n-'+n).setAttribute('fill','#fde68a'));
+  step.visited.forEach(n=>$('n-'+n).setAttribute('fill','#3b82f6'));
+  const c=$('n-'+step.cur); c.setAttribute('fill','#f59e0b'); c.setAttribute('stroke-width',4);
+}
+function paintPath(pred){
+  const c=$('n-'+pred); c.setAttribute('fill','#1f9d55'); $('n-U').setAttribute('fill','#1f9d55');
+  const e=$('e-'+pred); e.setAttribute('stroke','#1f9d55'); e.setAttribute('stroke-width',5);
+}
+let animToken=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function animate(res, delay){
+  const tk=++animToken; $('log').innerHTML='';
+  for(let i=0;i<res.steps.length;i++){
+    if(tk!==animToken) return;
+    paint(res.steps[i]);
+    $('log').innerHTML+=`<div>${i+1}. ${res.steps[i].msg}</div>`; $('log').scrollTop=1e6;
+    await sleep(delay);
+  }
+  if(tk!==animToken) return;
+  paintPath(res.pred);
+  $('log').innerHTML+=`<div><b>Camino final: Unknown → ${res.pred==='N'?'null':res.pred}</b> · nodos visitados: ${res.visited}</div>`;
+}
+
+/* ======================= Dibujo de imágenes y flujo principal ======================= */
+function drawGray(cv,g){const c=cv.getContext('2d'),im=c.createImageData(N,N);
+  for(let i=0;i<N*N;i++){const v=g[i];im.data[4*i]=im.data[4*i+1]=im.data[4*i+2]=v;im.data[4*i+3]=255}c.putImageData(im,0,0)}
+function drawBin(cv,b){const g=new Float32Array(N*N);for(let i=0;i<N*N;i++)g[i]=b[i]?0:255;drawGray(cv,g)}
+let CURRENT=null; // {gray,label}
+function analyze(gray){
+  const pp=preprocess(gray); const F=extractFeatures(pp.bin);
+  return {pp,F};
+}
+function showFeatures(F,cs){
+  let h='<tr><th>Rasgo</th><th>Valor</th></tr>';
+  FEAT_NAMES.forEach((n,i)=>h+=`<tr><td>${n}</td><td>${F.f[i].toFixed(2)}</td></tr>`);
+  $('featTable').innerHTML=h;
+}
+async function classifyCurrent(animateIt=true, label=null){
+  if(!CURRENT) return;
+  const {pp,F}=analyze(CURRENT.gray);
+  drawGray($('cvIn'),CURRENT.gray); drawBin($('cvBin'),pp.bin);
+  drawBin($('cvSk'),F.sk); showFeatures(F);
+  const algo=$('selAlgo').value; const res=search(algo,F,pp);
+  setEdgeLabels(res.cs);
+  const txt=res.pred==='N'?'null':String(res.pred);
+  const cs=res.cs;
+  $('result').textContent=txt;
+  $('resInfo').innerHTML=`Algoritmo: <b>${algo.toUpperCase()}</b> · nodos visitados: ${res.visited}`+
+     (res.reason?` · ${res.reason}`:` · costo mínimo=${Math.min(...cs.map(c=>c.c)).toFixed(2)} (θ=${THETA.toFixed(2)})`);
+  if(animateIt) await animate(res, +$('speed').value);
+  else {paint(res.steps[res.steps.length-1]); paintPath(res.pred)}
+  return res;
+}
+
+/* ======================= Evaluación de 25 dígitos ======================= */
+let TESTS=[];
+function makeTests(seed){
+  const rng=mulberry32(seed); const order=[...Array(10).keys(),...Array(10).keys(),0,1,2,3,4]; // 0-9, repetidos
+  TESTS=order.map(d=>({d,gray:renderDigit(d,rng)}));
+}
+function evaluateAll(){
+  let ok=0; let html='<table><tr><th>#</th><th>Imagen</th><th>Esperado</th><th>Predicho (A*)</th><th>Costo</th><th>Visitados</th><th></th></tr>';
+  TESTS.forEach((t,i)=>{
+    const {pp,F}=analyze(t.gray); const res=search('astar',F,pp);
+    t.pred=res.pred; const good=res.pred===t.d; if(good) ok++;
+    const cv=document.createElement('canvas'); cv.width=N;cv.height=N; drawGray(cv,t.gray);
+    html+=`<tr class="clk" data-i="${i}"><td>${i+1}</td><td><img src="${cv.toDataURL()}" width="42" height="42" style="image-rendering:pixelated;border:1px solid #aaa"></td>`+
+      `<td>${t.d}</td><td>${res.pred==='N'?'null':res.pred}</td><td>${res.pred==='N'?'–':res.cs[res.pred].c.toFixed(2)}</td><td>${res.visited}</td>`+
+      `<td class="${good?'ok':'bad'}">${good?'✔':'✘'}</td></tr>`;
+  });
+  html+='</table>'; $('evalTable').innerHTML=html;
+  $('accTxt').textContent=`Aciertos: ${ok}/25 = ${(ok/25*100).toFixed(1)} %`;
+  document.querySelectorAll('#evalTable tr.clk').forEach(tr=>tr.onclick=()=>{
+    document.querySelectorAll('#evalTable tr.sel').forEach(x=>x.classList.remove('sel')); tr.classList.add('sel');
+    CURRENT={gray:TESTS[+tr.dataset.i].gray}; classifyCurrent(true);
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+  return ok;
+}
+async function animateAll(){
+  if(!TESTS.length) evaluateAll();
+  const rows=[...document.querySelectorAll('#evalTable tr.clk')];
+  window.scrollTo({top:0,behavior:'smooth'});
+  for(let i=0;i<TESTS.length;i++){
+    rows.forEach(r=>r.classList.remove('sel')); rows[i].classList.add('sel');
+    CURRENT={gray:TESTS[i].gray};
+    const fast=Math.max(80,(+$('speed').value)/4);
+    const tk=animToken+1; await classifyCurrent(true);
+    if(animToken!==tk) return; // interrumpido por el usuario
+    await sleep(fast);
+  }
+}
+
+/* ======================= Eventos / inicio ======================= */
+function init(){
+  const sel=$('selDigit'); for(let d=0;d<10;d++) sel.innerHTML+=`<option value="${d}">${d}</option>`;
+  buildGraph();
+  $('gaStatus').textContent='Construyendo prototipos y entrenando AG…';
+  setTimeout(()=>{
+    buildPrototypes(); buildGASet(); trainGA();
+    makeTests(2024); evaluateAll();
+    CURRENT={gray:TESTS[0].gray}; classifyCurrent(true);
+  },30);
+  $('btnGen').onclick=()=>{CURRENT={gray:renderDigit(+sel.value,mulberry32(Date.now()%1e9))}; classifyCurrent(true)};
+  $('btnClass').onclick=()=>classifyCurrent(true);
+  $('btnGA').onclick=()=>{$('gaStatus').textContent='Entrenando…'; setTimeout(()=>{trainGA();makeTests(2024);evaluateAll()},20)};
+  $('btnEval').onclick=()=>{makeTests(2024);evaluateAll()};
+  $('btnEvalNew').onclick=()=>{makeTests(Math.floor(Math.random()*1e6)+5000);evaluateAll()};
+  $('btnEvalAnim').onclick=animateAll;
+  $('file').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const img=new Image(); img.onload=()=>{
+      const c=document.createElement('canvas'); c.width=N;c.height=N; const x=c.getContext('2d',{willReadFrequently:true});
+      x.fillStyle='#fff'; x.fillRect(0,0,N,N);
+      // se ajusta a 28x28 conservando proporción
+      const s=Math.min(N/img.width,N/img.height), w=img.width*s,h=img.height*s; x.drawImage(img,(N-w)/2,(N-h)/2,w,h);
+      const d=x.getImageData(0,0,N,N).data; const g=new Float32Array(N*N);
+      for(let i=0;i<N*N;i++) g[i]=(d[4*i]+d[4*i+1]+d[4*i+2])/3;
+      CURRENT={gray:g}; classifyCurrent(true);
+    }; img.src=URL.createObjectURL(f);
+  };
+}
+init();
+</script>
+</body>
+</html>
